@@ -1,0 +1,172 @@
+{% extends 'hr/base.html' %}
+
+{% block title %}Kelola KPI - AcademiaPay{% endblock %}
+{% block header_title %}Manajemen KPI Jabatan{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{% url 'master_data' %}" class="text-blue-600 hover:underline flex items-center text-sm">
+        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+        Kembali ke Master Data
+    </a>
+</div>
+
+<div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6 flex justify-between items-center">
+    <div>
+        <h2 class="text-xl font-bold text-gray-800">{{ position.nama_jabatan }}</h2>
+        <p class="text-sm text-gray-500">Departemen: {{ position.departement.nama_departemen }}</p>
+    </div>
+    <button onclick="openModal('modalKpi')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm rounded shadow transition">
+        + Tambah Indikator KPI
+    </button>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4">
+            <span class="block sm:inline">{{ message }}</span>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+    <h3 class="font-semibold text-gray-700 mb-4">Daftar Indikator Penilaian</h3>
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nama Indikator</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Integrasi</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Metode Ukur</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Bobot (%)</th>
+                    <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase w-24">Aksi</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {% for kpi in kpi_list %}
+                <tr>
+                    <td class="px-4 py-3">
+                        <p class="text-sm font-medium text-gray-800">{{ kpi.nama_kriteria }}</p>
+                        <p class="text-xs text-gray-500 mt-1">{{ kpi.deskripsi }}</p>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-800 capitalize">{{ kpi.integrasi_kpi }}</td>
+                    <td class="px-4 py-3 text-sm text-gray-800 capitalize">{{ kpi.metode_ukur }}</td>
+                    <td class="px-4 py-3 text-sm font-semibold text-blue-600">{{ kpi.bobot }}</td>
+                    <td class="px-4 py-3 text-sm text-center">
+                        <button onclick="openModal('modalEditKpi{{ kpi.id }}')" class="text-blue-600 hover:text-blue-800 bg-blue-50 px-3 py-1 rounded transition">Edit</button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="px-4 py-8 text-sm text-center text-gray-500">Belum ada indikator KPI untuk jabatan ini.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="modalKpi" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+        <h3 class="text-lg font-bold text-gray-800 mb-4">Tambah Indikator KPI</h3>
+        <form method="POST">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nama Indikator</label>
+                    {{ form.nama_kriteria }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
+                    {{ form.deskripsi }}
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Metode Ukur</label>
+                        {{ form.metode_ukur }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Integrasi</label>
+                        {{ form.integrasi_kpi }}
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Bobot (%)</label>
+                    {{ form.bobot }}
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2 mt-6">
+                <button type="button" onclick="closeModal('modalKpi')" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition">Batal</button>
+                <button type="submit" name="btn_tambah_kpi" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">Simpan KPI</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% for kpi in kpi_list %}
+<div id="modalEditKpi{{ kpi.id }}" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+        <h3 class="text-lg font-bold text-gray-800 mb-4">Edit Indikator KPI</h3>
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="kpi_id" value="{{ kpi.id }}">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nama Indikator</label>
+                    <input type="text" name="edit_nama_kriteria" value="{{ kpi.nama_kriteria }}" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
+                    <textarea name="edit_deskripsi" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" rows="2">{{ kpi.deskripsi }}</textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Metode Ukur</label>
+                        <select name="edit_metode_ukur" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" required>
+                            {% for value, text in form.fields.metode_ukur.choices %}
+                                {% if value %}
+                                <option value="{{ value }}" {% if kpi.metode_ukur == value %}selected{% endif %}>{{ text }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Integrasi</label>
+                        <select name="edit_integrasi_kpi" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" required>
+                            {% for value, text in form.fields.integrasi_kpi.choices %}
+                                {% if value %}
+                                <option value="{{ value }}" {% if kpi.integrasi_kpi == value %}selected{% endif %}>{{ text }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Bobot (%)</label>
+                    <input type="number" step="0.01" name="edit_bobot" value="{{ kpi.bobot|stringformat:"f" }}" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+            </div>
+            
+            <div class="flex justify-between items-center mt-6">
+                <button type="submit" name="btn_hapus_kpi" class="px-4 py-2 bg-red-100 text-red-600 rounded hover:bg-red-200 transition font-medium" onclick="return confirm('Yakin ingin menghapus indikator KPI ini?');">Hapus</button>
+                
+                <div class="flex space-x-2">
+                    <button type="button" onclick="closeModal('modalEditKpi{{ kpi.id }}')" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition">Batal</button>
+                    <button type="submit" name="btn_edit_kpi" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">Simpan</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endfor %}
+
+<script>
+    function openModal(modalId) {
+        document.getElementById(modalId).classList.remove('hidden');
+        document.getElementById(modalId).classList.add('flex');
+    }
+    function closeModal(modalId) {
+        document.getElementById(modalId).classList.add('hidden');
+        document.getElementById(modalId).classList.remove('flex');
+    }
+</script>
+{% endblock %}

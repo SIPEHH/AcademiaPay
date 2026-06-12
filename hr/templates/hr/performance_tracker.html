@@ -1,0 +1,306 @@
+{% extends 'hr/base.html' %}
+
+{% block title %}Performance Tracker - AcademiaPay{% endblock %}
+{% block header_title %}Penilaian KPI Bulanan{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">
+        <form method="GET" class="flex gap-4 w-full md:w-auto">
+            <select name="bulan" class="px-4 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 text-sm w-full md:w-32" onchange="this.form.submit()">
+                {% for value, name in bulan_choices %}
+                    <option value="{{ value }}" {% if selected_bulan|stringformat:"s" == value|stringformat:"s" %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+            <input type="number" name="tahun" value="{{ selected_tahun }}" class="px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 text-sm w-full md:w-24" onchange="this.form.submit()">
+        </form>
+        
+        <form method="GET" class="flex w-full md:w-96 gap-2">
+            <input type="hidden" name="bulan" value="{{ selected_bulan }}">
+            <input type="hidden" name="tahun" value="{{ selected_tahun }}">
+            <input type="text" name="q" value="{{ search_query }}" placeholder="Cari Nama / NIY..." class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 text-sm">
+            <button type="submit" class="bg-gray-800 text-white px-4 py-2 rounded-md text-sm">Cari</button>
+        </form>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col justify-center items-center h-48">
+            <h3 class="font-semibold text-gray-800 text-sm mb-2 w-full text-left">Distribusi Grade</h3>
+            <div class="relative w-32 h-32">
+                <canvas id="gradeChart"></canvas>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex items-center h-48">
+            <div class="p-4 rounded-full bg-blue-100 text-blue-600 mr-4">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+            </div>
+            <div>
+                <p class="text-sm font-medium text-gray-500">Rata-rata Skor Institusi</p>
+                <p class="text-4xl font-bold text-gray-800 mt-1">{{ avg_score }}</p>
+                <p class="text-xs text-gray-400 mt-1">Skala 1-100</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex items-center h-48">
+            <div class="p-4 rounded-full {% if peningkatan > 0 %}bg-green-100 text-green-600{% elif peningkatan < 0 %}bg-red-100 text-red-600{% else %}bg-gray-100 text-gray-600{% endif %} mr-4">
+                {% if peningkatan > 0 %}
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                {% elif peningkatan < 0 %}
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6"></path></svg>
+                {% else %}
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14"></path></svg>
+                {% endif %}
+            </div>
+            <div>
+                <p class="text-sm font-medium text-gray-500">Performa vs Bulan Lalu</p>
+                <p class="text-3xl font-bold text-gray-800 mt-1">
+                    {% if peningkatan > 0 %}+{% endif %}{{ peningkatan }} Poin
+                </p>
+            </div>
+        </div>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">NIY / Nama</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jabatan</th>
+                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total Skor</th>
+                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Grade</th>
+                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-32">Status</th>
+                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">Aksi</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {% for item in emp_data %}
+                <tr>
+                    <td class="px-4 py-3">
+                        <p class="text-sm font-bold text-gray-800">{{ item.employee.nama }}</p>
+                        <p class="text-xs text-gray-500">{{ item.employee.niy }}</p>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-800">{{ item.employee.position.nama_jabatan }}</td>
+                    
+                    <td class="px-4 py-3 text-center text-sm font-bold {% if item.penilaian %}text-blue-600{% else %}text-gray-400{% endif %}">
+                        {{ item.penilaian.total_skor|default:"-" }}
+                    </td>
+                    
+                    <td class="px-4 py-3 text-center">
+                        {% if item.penilaian.grade_akhir %}
+                            <span class="px-2 py-1 text-sm font-bold rounded 
+                                {% if item.penilaian.grade_akhir == 'A' %}bg-green-100 text-green-800
+                                {% elif item.penilaian.grade_akhir == 'B' %}bg-blue-100 text-blue-800
+                                {% elif item.penilaian.grade_akhir == 'C' %}bg-yellow-100 text-yellow-800
+                                {% else %}bg-red-100 text-red-800{% endif %}">
+                                {{ item.penilaian.grade_akhir }}
+                            </span>
+                        {% else %}
+                            <span class="text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+                    
+                    <td class="px-4 py-3 text-center">
+                        {% if item.penilaian %}
+                            <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">Ternilai</span>
+                        {% else %}
+                            <span class="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">Belum Dinilai</span>
+                        {% endif %}
+                    </td>
+                    
+                    <td class="px-4 py-3 text-center">
+                        {% if item.has_kpi %}
+                            <button onclick="openModal('modalNilai{{ item.employee.id }}')" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-1.5 text-xs font-medium rounded shadow transition">Nilai</button>
+                        {% else %}
+                            <button disabled class="bg-gray-200 text-gray-400 px-4 py-1.5 text-xs font-medium rounded cursor-not-allowed" title="Jabatan belum memiliki Master KPI">No KPI</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% for item in emp_data %}
+        {% if item.has_kpi %}
+        <div id="modalNilai{{ item.employee.id }}" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
+                
+                <div class="border-b border-gray-200 pb-3 mb-4 flex justify-between items-start">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-800">Form Penilaian KPI</h3>
+                        <p class="text-sm text-gray-500">{{ item.employee.nama }} ({{ item.employee.position.nama_jabatan }})</p>
+                    </div>
+                </div>
+
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="emp_id" value="{{ item.employee.id }}">
+                    
+                    <div class="mb-6 bg-blue-50 border border-blue-200 p-4 rounded-lg flex justify-between items-center shadow-sm">
+                        <div>
+                            <p class="text-sm font-bold text-blue-800 mb-1">Capaian Integrasi:</p>
+                            <ul id="summary-integrasi-{{ item.employee.id }}" class="text-xs text-blue-700 space-y-1">
+                                </ul>
+                        </div>
+                        <div class="text-right border-l border-blue-200 pl-6">
+                            <p class="text-xs text-blue-600 uppercase tracking-wide font-semibold">Estimasi Grade</p>
+                            <p id="summary-grade-{{ item.employee.id }}" class="text-4xl font-black text-blue-700 my-1">{{ item.penilaian.grade_akhir|default:"-" }}</p>
+                            <p id="summary-total-{{ item.employee.id }}" class="text-sm font-bold text-blue-800">Total Rata-rata: {{ item.penilaian.total_skor|default:"0" }}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-6 mb-6">
+                        {% for integrasi, group_data in item.kpi_grouped.items %}
+                            <div>
+                                <h4 class="font-bold text-gray-700 uppercase border-b-2 border-gray-300 pb-1 mb-3 text-sm flex justify-between items-center">
+                                    <span>{{ integrasi }}</span>
+                                    <span class="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">Max Bobot Integrasi: {{ group_data.total_bobot_max }}%</span>
+                                </h4>
+                                
+                                <div class="space-y-3">
+                                    {% for d in group_data.kpis %}
+                                    <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 flex justify-between items-center">
+                                        <div class="w-2/3 pr-4">
+                                            <label class="block text-sm font-bold text-gray-800">{{ d.kpi.nama_kriteria }} <span class="text-xs font-normal text-blue-600 bg-blue-100 px-2 py-0.5 rounded ml-1">Bobot: {{ d.kpi.bobot }}%</span></label>
+                                            <p class="text-xs text-gray-500 mt-1">{{ d.kpi.deskripsi|default:"Tidak ada deskripsi." }}</p>
+                                        </div>
+                                        <div class="w-1/3">
+                                            {% if d.kpi.metode_ukur|lower == 'boolean' %}
+                                                <select name="kpi_{{ d.kpi.id }}" class="kpi-input-{{ item.employee.id }} w-full px-3 py-2 border border-gray-300 rounded focus:ring-blue-500 bg-white" data-bobot="{{ d.kpi.bobot }}" data-integrasi="{{ integrasi }}" onchange="calculateLiveScore('{{ item.employee.id }}')" required>
+                                                    <option value="" disabled {% if not item.penilaian %}selected{% endif %}>Pilih...</option>
+                                                    <option value="100" {% if d.skor_mentah == 100 %}selected{% endif %}>Ya (Tercapai)</option>
+                                                    <option value="0" {% if d.skor_mentah == 0 and item.penilaian %}selected{% endif %}>Tidak (Gagal)</option>
+                                                </select>
+                                            {% else %}
+                                                <input type="number" step="0.01" min="0" max="100" name="kpi_{{ d.kpi.id }}" value="{{ d.skor_mentah|default:'' }}" class="kpi-input-{{ item.employee.id }} w-full px-3 py-2 border border-gray-300 rounded focus:ring-blue-500" placeholder="Skor 0-100" data-bobot="{{ d.kpi.bobot }}" data-integrasi="{{ integrasi }}" oninput="calculateLiveScore('{{ item.employee.id }}')" required>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="flex justify-between items-center pt-4 border-t border-gray-200">
+                        <div>
+                            {% if item.penilaian %}
+                                <button type="submit" name="btn_hapus_nilai" class="px-4 py-2 bg-red-100 text-red-600 rounded hover:bg-red-200 transition text-sm font-medium" onclick="return confirm('Yakin ingin mereset/menghapus penilaian ini?');">Hapus Data</button>
+                                <input type="hidden" name="penilaian_id" value="{{ item.penilaian.id }}">
+                            {% else %}
+                                <span></span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="flex space-x-2">
+                            <button type="button" onclick="closeModal('modalNilai{{ item.employee.id }}')" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition text-sm">Batal</button>
+                            <button type="submit" name="btn_simpan_nilai" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition text-sm font-bold">Simpan Nilai</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    {% endfor %}
+
+</div>
+
+<script>
+    // --- SCRIPT REAL-TIME KALKULASI GRADE ---
+    function calculateLiveScore(empId) {
+        const inputs = document.querySelectorAll(`.kpi-input-${empId}`);
+        let integrasiTotals = {};
+
+        // Loop semua input dan kelompokkan skor berbobotnya
+        inputs.forEach(input => {
+            const val = parseFloat(input.value) || 0;
+            const bobot = parseFloat(input.dataset.bobot) || 0;
+            const integrasi = input.dataset.integrasi;
+            
+            const bobotScore = (val * bobot) / 100;
+            
+            if(!integrasiTotals[integrasi]) integrasiTotals[integrasi] = 0;
+            integrasiTotals[integrasi] += bobotScore;
+        });
+
+        // Hitung total rata-rata: (Total Jabatan + Total Performance dll) / Jumlah Integrasi
+        let totalScore = 0;
+        const numCategories = Object.keys(integrasiTotals).length;
+        
+        if (numCategories > 0) {
+            let sumScores = 0;
+            for (const score of Object.values(integrasiTotals)) {
+                sumScores += score;
+            }
+            totalScore = sumScores / numCategories;
+        }
+
+        // 1. Update Estimasi Grade berdasarkan aturan
+        let grade = 'D';
+        if(totalScore >= 85) grade = 'A';
+        else if(totalScore >= 70) grade = 'B';
+        else if(totalScore >= 55) grade = 'C';
+        
+        document.getElementById(`summary-grade-${empId}`).innerText = grade;
+        document.getElementById(`summary-total-${empId}`).innerText = `Total Rata-rata: ${totalScore.toFixed(2)}`;
+        
+        // 2. Update Detail Capaian per Integrasi
+        const ul = document.getElementById(`summary-integrasi-${empId}`);
+        ul.innerHTML = '';
+        for (const [integ, score] of Object.entries(integrasiTotals)) {
+            ul.innerHTML += `<li>&bull; ${integ.toUpperCase()}: <span class="font-bold ml-1">${score.toFixed(2)} Poin</span></li>`;
+        }
+    }
+
+    function openModal(modalId) {
+        document.getElementById(modalId).classList.remove('hidden');
+        document.getElementById(modalId).classList.add('flex');
+        
+        // Jalankan kalkulasi sekali saat modal pertama dibuka agar summary terisi otomatis
+        const empId = modalId.replace('modalNilai', '');
+        if(empId) calculateLiveScore(empId);
+    }
+
+    function closeModal(modalId) {
+        document.getElementById(modalId).classList.add('hidden');
+        document.getElementById(modalId).classList.remove('flex');
+    }
+
+    // Chart.js untuk Distribusi
+    const chartCanvas = document.getElementById('gradeChart');
+    if (chartCanvas) {
+        const ctx = chartCanvas.getContext('2d');
+        const dataA = {{ distribusi.A|default:0 }};
+        const dataB = {{ distribusi.B|default:0 }};
+        const dataC = {{ distribusi.C|default:0 }};
+        const dataD = {{ distribusi.D|default:0 }};
+
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Grade A', 'Grade B', 'Grade C', 'Grade D'],
+                datasets: [{
+                    data: [dataA, dataB, dataC, dataD],
+                    backgroundColor: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444'], // Green, Blue, Yellow, Red
+                    borderWidth: 0,
+                    cutout: '60%'
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+</script>
+{% endblock %}
