@@ -6,6 +6,8 @@ from django.db.models import Sum, Q
 from django.utils import timezone
 from .models import Departement, Position, KpiCriteria, Employee, PenilaianKinerja, DetailPenilaian
 from .forms import DepartementForm, PositionForm, KpiCriteriaForm
+import json
+from .models import Payroll, PayrollDetail
 
 def login_view(request):
     if request.user.is_authenticated:
@@ -21,11 +23,42 @@ def login_view(request):
 
 @login_required(login_url='login')
 def dashboard_view(request):
-    # Menghitung total karyawan langsung dari database
+    # 1. Dapatkan Bulan dan Tahun Saat Ini
+    now = timezone.now()
+    current_month = now.month
+    current_year = now.year
+
+    # 2. Hitung Total Karyawan
     total_karyawan = Employee.objects.count()
+
+    # 3. Cari Data Gaji yang SUDAH SELESAI bulan ini
+    payrolls_bulan_ini = Payroll.objects.filter(bulan=current_month, tahun=current_year, status='Selesai')
     
+    # 4. Kalkulasi Angka untuk Dashboard
+    total_sudah_digaji = payrolls_bulan_ini.count()
+    total_belum_digaji = total_karyawan - total_sudah_digaji
+    
+    # Total uang gaji yang dikeluarkan bulan ini
+    estimasi_gaji = payrolls_bulan_ini.aggregate(Sum('gaji_bersih'))['gaji_bersih__sum'] or 0
+    
+    # Hitung Persentase (Cegah error pembagian dengan nol)
+    persentase_terbayar = 0
+    if total_karyawan > 0:
+        persentase_terbayar = int((total_sudah_digaji / total_karyawan) * 100)
+
+    # 5. Dapatkan Daftar Karyawan yang BELUM DIGAJI
+    # Ambil ID karyawan yang sudah ada di daftar gaji bulan ini
+    paid_employee_ids = payrolls_bulan_ini.values_list('employee_id', flat=True)
+    # Filter karyawan yang ID-nya TIDAK ADA di daftar tersebut (Batasi 5 orang saja untuk di tabel)
+    karyawan_belum_digaji = Employee.objects.exclude(id__in=paid_employee_ids)[:5]
+
     context = {
         'total_karyawan': total_karyawan,
+        'estimasi_gaji': estimasi_gaji,
+        'total_sudah_digaji': total_sudah_digaji,
+        'total_belum_digaji': total_belum_digaji,
+        'persentase_terbayar': persentase_terbayar,
+        'karyawan_belum_digaji': karyawan_belum_digaji,
     }
     return render(request, 'hr/dashboard.html', context)
 
@@ -343,3 +376,118 @@ def performance_tracker_view(request):
         'peningkatan': peningkatan,
     }
     return render(request, 'hr/performance_tracker.html', context)
+
+@login_required(login_url='login')
+def perhitungan_gaji_view(request):
+    now = timezone.now()
+    selected_bulan = int(request.GET.get('bulan', now.month))
+    selected_tahun = int(request.GET.get('tahun', now.year))
+    search_query = request.GET.get('q', '')
+    status_filter = request.GET.get('status', 'semua') # semua, selesai, draft
+
+    # ================= LOGIKA PENYIMPANAN (POST) =================
+    if request.method == 'POST':
+        if 'btn_simpan_gaji' in request.POST:
+            emp_id = request.POST.get('emp_id')
+            emp = get_object_or_404(Employee, id=emp_id)
+            
+            hari_alpa = int(request.POST.get('hari_alpa', 0))
+            potongan_alpa = hari_alpa * 25000
+            
+            # Ambil data Gaji Pokok & Tunjangan saat ini dari Master
+            gaji_pokok = emp.gaji_pokok
+            tunjangan = emp.position.tunjangan_jabatan if emp.position else 0
+            
+            # Menghitung Bonus
+            bonus_names = request.POST.getlist('bonus_nama[]')
+            bonus_nominals = request.POST.getlist('bonus_nominal[]')
+            total_bonus = sum([int(nom.replace('.', '') or 0) for nom in bonus_nominals])
+            
+            # Perhitungan Gaji Bersih
+            gaji_bersih = (gaji_pokok + tunjangan) - potongan_alpa + total_bonus
+            
+            # Simpan ke Database
+            payroll, created = Payroll.objects.update_or_create(
+                employee=emp, bulan=selected_bulan, tahun=selected_tahun,
+                defaults={
+                    'gaji_pokok': gaji_pokok,
+                    'tunjangan_jabatan': tunjangan,
+                    'hari_alpa': hari_alpa,
+                    'total_potongan': potongan_alpa,
+                    'total_bonus': total_bonus,
+                    'gaji_bersih': gaji_bersih,
+                    'status': 'Selesai' 
+                }
+            )
+            
+            # Hapus bonus lama dan simpan yang baru (update relasi)
+            payroll.bonus_details.all().delete()
+            for nama, nom in zip(bonus_names, bonus_nominals):
+                nominal_bersih = int(nom.replace('.', '') or 0)
+                if nama and nominal_bersih > 0:
+                    PayrollDetail.objects.create(payroll=payroll, nama_bonus=nama, nominal=nominal_bersih)
+            
+            messages.success(request, f'Gaji {emp.nama} berhasil dihitung dan disimpan!')
+            return redirect(f"{request.path}?bulan={selected_bulan}&tahun={selected_tahun}&q={search_query}&status={status_filter}")
+
+    # ================= QUERY DATA KARYAWAN & GAJI =================
+    employees = Employee.objects.all()
+    if search_query:
+        employees = employees.filter(Q(nama__icontains=search_query) | Q(niy__icontains=search_query))
+
+    data_gaji = []
+    total_diproses = 0
+    estimasi_pencairan = 0
+
+    for emp in employees:
+        # Cari apakah gaji bulan ini sudah dibuat
+        payroll = Payroll.objects.filter(employee=emp, bulan=selected_bulan, tahun=selected_tahun).first()
+        
+        # Jika belum ada di database, buat data 'bayangan' untuk ditampilkan di tabel
+        status = payroll.status if payroll else 'Draft'
+        gaji_pokok = payroll.gaji_pokok if payroll else emp.gaji_pokok
+        tunjangan = payroll.tunjangan_jabatan if payroll else (emp.position.tunjangan_jabatan if emp.position else 0)
+        
+        if status == 'Selesai':
+            total_diproses += 1
+            estimasi_pencairan += payroll.gaji_bersih
+            
+        # Terapkan Filter Status
+        if status_filter == 'selesai' and status != 'Selesai': continue
+        if status_filter == 'draft' and status != 'Draft': continue
+
+        # Format detail bonus untuk dikirim ke JS Modal
+        bonus_list = []
+        if payroll:
+            bonus_list = [{'nama': b.nama_bonus, 'nominal': float(b.nominal)} for b in payroll.bonus_details.all()]
+
+        data_gaji.append({
+            'employee': emp,
+            'payroll': payroll,
+            'status': status,
+            'pendapatan_tetap': gaji_pokok + tunjangan,
+            'gaji_pokok': gaji_pokok,
+            'tunjangan': tunjangan,
+            'hari_alpa': payroll.hari_alpa if payroll else 0,
+            'total_bonus': payroll.total_bonus if payroll else 0,
+            'gaji_bersih': payroll.gaji_bersih if payroll else (gaji_pokok + tunjangan),
+            'bonus_json': json.dumps(bonus_list) # Kirim data bonus format JSON untuk JS
+        })
+
+    total_karyawan = employees.count()
+    belum_dihitung = total_karyawan - total_diproses
+
+    context = {
+        'data_gaji': data_gaji,
+        'total_diproses': total_diproses,
+        'total_karyawan': total_karyawan,
+        'belum_dihitung': belum_dihitung,
+        'estimasi_pencairan': estimasi_pencairan,
+        'selected_bulan': selected_bulan,
+        'selected_tahun': selected_tahun,
+        'search_query': search_query,
+        'status_filter': status_filter,
+        'bulan_choices': Payroll.BULAN_CHOICES,
+    }
+    return render(request, 'hr/perhitungan_gaji.html', context)
+

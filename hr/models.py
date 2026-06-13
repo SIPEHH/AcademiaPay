@@ -117,31 +117,74 @@ class SalaryComponent(models.Model):
         return f"{self.nama_komponen} ({self.tipe})"
 
 # 10. Tabel PAYROLLS (Transaksi Penggajian)
+# class Payroll(models.Model):
+#     STATUS_PAYROLL_CHOICES = (
+#         ('draft', 'Draft'),
+#         ('belum', 'Belum (Belum Dibayar)'),
+#         ('done', 'Done (Sudah Dibayar)'),
+#     )
+#     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='payrolls')
+#     period = models.ForeignKey(Period, on_delete=models.CASCADE)
+#     gaji_pokok = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+#     total_tunjangan = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+#     total_potongan = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+#     gaji_bersih = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+#     status = models.CharField(max_length=20, choices=STATUS_PAYROLL_CHOICES, default='draft')
+
+#     def __str__(self):
+#         return f"Payroll {self.employee.nama} - {self.period.nama_periode}"
+
+# # 11. Tabel PAYROLL_DETAILS (Rincian Tunjangan/Potongan pada suatu Payroll)
+# class PayrollDetail(models.Model):
+#     payroll = models.ForeignKey(Payroll, on_delete=models.CASCADE, related_name='details')
+#     salary_component = models.ForeignKey(SalaryComponent, on_delete=models.CASCADE)
+#     nominal = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+
+#     def __str__(self):
+#         return f"Detail {self.salary_component.nama_komponen} - Payroll ID: {self.payroll.id}"
+
 class Payroll(models.Model):
-    STATUS_PAYROLL_CHOICES = (
-        ('draft', 'Draft'),
-        ('belum', 'Belum (Belum Dibayar)'),
-        ('done', 'Done (Sudah Dibayar)'),
+    BULAN_CHOICES = [
+        (1, 'Januari'), (2, 'Februari'), (3, 'Maret'), (4, 'April'),
+        (5, 'Mei'), (6, 'Juni'), (7, 'Juli'), (8, 'Agustus'),
+        (9, 'September'), (10, 'Oktober'), (11, 'November'), (12, 'Desember')
+    ]
+    STATUS_CHOICES = (
+        ('Draft', 'Draft'),
+        ('Selesai', 'Selesai'),
     )
+    
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='payrolls')
-    period = models.ForeignKey(Period, on_delete=models.CASCADE)
-    gaji_pokok = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
-    total_tunjangan = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
-    total_potongan = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
-    gaji_bersih = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
-    status = models.CharField(max_length=20, choices=STATUS_PAYROLL_CHOICES, default='draft')
+    bulan = models.IntegerField(choices=BULAN_CHOICES)
+    tahun = models.IntegerField()
+    
+    # Komponen Gaji
+    gaji_pokok = models.DecimalField(max_digits=15, decimal_places=0, default=0)
+    tunjangan_jabatan = models.DecimalField(max_digits=15, decimal_places=0, default=0)
+    
+    # Variabel Dinamis
+    hari_alpa = models.IntegerField(default=0)
+    total_potongan = models.DecimalField(max_digits=15, decimal_places=0, default=0) # Alpa * 25000
+    total_bonus = models.DecimalField(max_digits=15, decimal_places=0, default=0)
+    
+    # Hasil Akhir
+    gaji_bersih = models.DecimalField(max_digits=15, decimal_places=0, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Draft')
+
+    class Meta:
+        unique_together = ('employee', 'bulan', 'tahun')
 
     def __str__(self):
-        return f"Payroll {self.employee.nama} - {self.period.nama_periode}"
+        return f"Gaji {self.employee.nama} - {self.get_bulan_display()} {self.tahun}"
 
-# 11. Tabel PAYROLL_DETAILS (Rincian Tunjangan/Potongan pada suatu Payroll)
+
 class PayrollDetail(models.Model):
-    payroll = models.ForeignKey(Payroll, on_delete=models.CASCADE, related_name='details')
-    salary_component = models.ForeignKey(SalaryComponent, on_delete=models.CASCADE)
-    nominal = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    payroll = models.ForeignKey(Payroll, on_delete=models.CASCADE, related_name='bonus_details')
+    nama_bonus = models.CharField(max_length=255) # Contoh: "Lembur", "Bonus Project"
+    nominal = models.DecimalField(max_digits=15, decimal_places=0, default=0)
 
     def __str__(self):
-        return f"Detail {self.salary_component.nama_komponen} - Payroll ID: {self.payroll.id}"
+        return f"{self.nama_bonus} - Rp {self.nominal}"
 
 class PenilaianKinerja(models.Model):
     BULAN_CHOICES = [
