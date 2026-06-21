@@ -4,7 +4,10 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Sum, Q
 from django.utils import timezone
+from django.http import HttpResponse
 import json
+import openpyxl # BARU: Import library Excel asli
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side # BARU: Import styling Excel
 
 from .models import Departement, Position, KpiCriteria, Employee, PenilaianKinerja, DetailPenilaian, MasterTunjangan
 from .models import Payroll, PayrollDetail
@@ -109,10 +112,11 @@ def master_data_view(request):
         elif 'btn_tambah_tunjangan' in request.POST:
             nama = request.POST.get('nama_tunjangan')
             nominal = request.POST.get('nominal_maksimal')
+            jenis = request.POST.get('jenis_tunjangan') 
             if MasterTunjangan.objects.filter(nama_tunjangan__iexact=nama).exists():
                 messages.error(request, 'Nama Tunjangan sudah ada!')
             else:
-                MasterTunjangan.objects.create(nama_tunjangan=nama, nominal_maksimal=nominal)
+                MasterTunjangan.objects.create(nama_tunjangan=nama, nominal_maksimal=nominal, jenis_tunjangan=jenis)
                 messages.success(request, 'Tunjangan berhasil ditambahkan!')
             return redirect('master_data')
             
@@ -124,6 +128,7 @@ def master_data_view(request):
             else:
                 tunj.nama_tunjangan = nama
                 tunj.nominal_maksimal = request.POST.get('edit_nominal_maksimal')
+                tunj.jenis_tunjangan = request.POST.get('edit_jenis_tunjangan')
                 tunj.save()
                 messages.success(request, 'Tunjangan berhasil diperbarui!')
             return redirect('master_data')
@@ -398,31 +403,35 @@ def perhitungan_gaji_view(request):
 
     master_tunjangans = MasterTunjangan.objects.all()
 
+    # ================= LOGIKA PENYIMPANAN (POST) =================
     if request.method == 'POST':
         if 'btn_simpan_gaji' in request.POST:
             emp_id = request.POST.get('emp_id')
             emp = get_object_or_404(Employee, id=emp_id)
             
             gaji_pokok = float(emp.gaji_pokok)
-            
             penilaian_kpi = PenilaianKinerja.objects.filter(employee=emp, bulan=selected_bulan, tahun=selected_tahun).first()
+            
             tunjangan_awal = float(emp.position.tunjangan_jabatan) if emp.position else 0.0
             tunjangan = tunjangan_awal
+            kpi_tj = KpiCriteria.objects.filter(position=emp.position, integrasi_kpi__icontains='jabatan')
             
-            if penilaian_kpi:
-                details_tj = DetailPenilaian.objects.filter(
-                    penilaian=penilaian_kpi,
-                    kriteria_kpi__integrasi_kpi__icontains='jabatan'
-                )
-                if details_tj.exists():
-                    skor_tj = sum(float(d.skor_berbobot) for d in details_tj)
-                    tunjangan = (skor_tj / 100.0) * tunjangan_awal
+            if kpi_tj.exists():
+                if penilaian_kpi:
+                    details_tj = DetailPenilaian.objects.filter(penilaian=penilaian_kpi, kriteria_kpi__in=kpi_tj)
+                    if details_tj.exists():
+                        skor_tj = sum(float(d.skor_berbobot) for d in details_tj)
+                        tunjangan = (skor_tj / 100.0) * tunjangan_awal
+                    else:
+                        tunjangan = 0.0 
+                else:
+                    tunjangan = 0.0 
             
             bonus_names = request.POST.getlist('bonus_nama[]')
             bonus_nominals = request.POST.getlist('bonus_nominal[]')
-            total_bonus = sum([float(nom.replace('.', '') or 0) for nom in bonus_nominals])
+            total_bonus = sum([float(str(nom).replace('.', '') or 0) for nom in bonus_nominals])
             
-            total_potongan = float(request.POST.get('total_potongan', 0).replace('.', '') if request.POST.get('total_potongan') else 0)
+            total_potongan = float(str(request.POST.get('total_potongan', 0)).replace('.', '') if request.POST.get('total_potongan') else 0)
             deskripsi_potongan = request.POST.get('deskripsi_potongan', '')
             
             gaji_bersih = (gaji_pokok + tunjangan) + total_bonus - total_potongan
@@ -449,6 +458,7 @@ def perhitungan_gaji_view(request):
             messages.success(request, f'Gaji {emp.nama} berhasil dihitung dan disimpan!')
             return redirect(f"{request.path}?bulan={selected_bulan}&tahun={selected_tahun}&q={search_query}&status={status_filter}")
 
+    # ================= QUERY DATA KARYAWAN DENGAN LIVE SYNC SELALU AKTIF =================
     employees = Employee.objects.all()
     if search_query:
         employees = employees.filter(Q(nama__icontains=search_query) | Q(niy__icontains=search_query))
@@ -462,67 +472,67 @@ def perhitungan_gaji_view(request):
         penilaian_kpi = PenilaianKinerja.objects.filter(employee=emp, bulan=selected_bulan, tahun=selected_tahun).first()
         
         status = payroll.status if payroll else 'Draft'
-        gaji_pokok = float(payroll.gaji_pokok if payroll else emp.gaji_pokok)
+        gaji_pokok = float(emp.gaji_pokok) 
         
-        if payroll:
-            tunjangan = float(payroll.tunjangan_jabatan)
-            total_potongan = float(payroll.total_potongan)
-            deskripsi_potongan = payroll.deskripsi_potongan or ''
-        else:
-            tunjangan_awal = float(emp.position.tunjangan_jabatan) if emp.position else 0.0
-            tunjangan = tunjangan_awal
-            total_potongan = 0.0
-            deskripsi_potongan = ''
+        tunjangan_awal = float(emp.position.tunjangan_jabatan) if emp.position else 0.0
+        tunjangan = tunjangan_awal
+        kpi_tj = KpiCriteria.objects.filter(position=emp.position, integrasi_kpi__icontains='jabatan')
+        
+        if kpi_tj.exists():
             if penilaian_kpi:
-                details_tj = DetailPenilaian.objects.filter(
-                    penilaian=penilaian_kpi,
-                    kriteria_kpi__integrasi_kpi__icontains='jabatan'
-                )
+                details_tj = DetailPenilaian.objects.filter(penilaian=penilaian_kpi, kriteria_kpi__in=kpi_tj)
                 if details_tj.exists():
                     skor_tj = sum(float(d.skor_berbobot) for d in details_tj)
                     tunjangan = (skor_tj / 100.0) * tunjangan_awal
+                else:
+                    tunjangan = 0.0
+            else:
+                tunjangan = 0.0
+
+        total_potongan = float(payroll.total_potongan) if payroll else 0.0
+        deskripsi_potongan = payroll.deskripsi_potongan if payroll else ''
         
         if status == 'Selesai':
             total_diproses += 1
-            estimasi_pencairan += float(payroll.gaji_bersih)
+            estimasi_pencairan += float(payroll.gaji_bersih) 
             
         if status_filter == 'selesai' and status != 'Selesai': continue
         if status_filter == 'draft' and status != 'Draft': continue
 
         skor_performance = float(penilaian_kpi.total_skor) if penilaian_kpi else 0.0
 
+        # --- LIVE SYNC MASTER TUNJANGAN ---
         bonus_list = []
-        if payroll and payroll.status == 'Selesai':
-            for b in payroll.bonus_details.all():
-                is_kpi = any(x in b.nama_bonus for x in ["(KPI:", "(Belum Dinilai)"])
-                bonus_list.append({'nama': b.nama_bonus, 'nominal': float(b.nominal), 'is_kpi': is_kpi})
-        else:
-            # === PERBAIKAN LOGIKA MASTER TUNJANGAN ===
-            # Hanya berikan tunjangan jika ada KPI yang mengikat tunjangan tersebut pada jabatan si karyawan
-            for mt in master_tunjangans:
+        for mt in master_tunjangans:
+            if mt.jenis_tunjangan == 'Tetap':
+                if float(mt.nominal_maksimal) > 0:
+                    bonus_list.append({
+                        'nama': f"{mt.nama_tunjangan} (Tetap)", 
+                        'nominal': float(mt.nominal_maksimal), 
+                        'is_kpi': True
+                    })
+            else:
                 kpi_terikat = KpiCriteria.objects.filter(position=emp.position, integrasi_kpi__iexact=mt.nama_tunjangan)
-                
                 if kpi_terikat.exists():
                     if penilaian_kpi:
                         details = DetailPenilaian.objects.filter(penilaian=penilaian_kpi, kriteria_kpi__in=kpi_terikat)
                         if details.exists():
                             skor_capaian = sum(float(d.skor_berbobot) for d in details)
                             nominal_didapat = (skor_capaian / 100.0) * float(mt.nominal_maksimal)
-                            
-                            bonus_list.append({'nama': f"{mt.nama_tunjangan} (KPI: {skor_capaian}%)", 'nominal': nominal_didapat, 'is_kpi': True})
+                            if nominal_didapat > 0:
+                                bonus_list.append({'nama': f"{mt.nama_tunjangan} (KPI: {skor_capaian}%)", 'nominal': nominal_didapat, 'is_kpi': True})
                         else:
                             bonus_list.append({'nama': f"{mt.nama_tunjangan} (Belum Dinilai)", 'nominal': 0.0, 'is_kpi': True})
                     else:
                         bonus_list.append({'nama': f"{mt.nama_tunjangan} (Belum Dinilai)", 'nominal': 0.0, 'is_kpi': True})
-                # Jika tidak ada KPI yang terikat, tunjangan diabaikan secara total (tidak mendapat apa-apa)
 
-            if payroll:
-                for b in payroll.bonus_details.all():
-                    if not any(x in b.nama_bonus for x in ["(KPI:", "(Belum Dinilai)"]):
-                        bonus_list.append({'nama': b.nama_bonus, 'nominal': float(b.nominal), 'is_kpi': False})
+        if payroll:
+            for b in payroll.bonus_details.all():
+                if not any(x in b.nama_bonus for x in ["(KPI:", "(Belum Dinilai)", "(Tetap)"]):
+                    bonus_list.append({'nama': b.nama_bonus, 'nominal': float(b.nominal), 'is_kpi': False})
 
-        total_bonus_display = float(payroll.total_bonus) if payroll else sum(b['nominal'] for b in bonus_list)
-        gaji_bersih_display = float(payroll.gaji_bersih) if payroll else (gaji_pokok + tunjangan + total_bonus_display - total_potongan)
+        total_bonus_display = sum(b['nominal'] for b in bonus_list)
+        gaji_bersih_display = (gaji_pokok + tunjangan + total_bonus_display) - total_potongan
 
         data_gaji.append({
             'employee': emp,
@@ -541,6 +551,96 @@ def perhitungan_gaji_view(request):
 
     total_karyawan = employees.count()
     belum_dihitung = total_karyawan - total_diproses
+
+    # ================= LOGIKA EXPORT EXCEL RAPI (OPENPYXL) =================
+    if request.GET.get('btn_export_excel'):
+        # Menyiapkan response sebagai file .xlsx
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="Laporan_Gaji_{selected_bulan}_{selected_tahun}.xlsx"'
+        
+        # Membuat Workbook Excel baru
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = f"Gaji Bln {selected_bulan} Thn {selected_tahun}"
+
+        # 1. Kumpulkan semua nama bonus/tunjangan dinamis
+        bonus_headers = []
+        for item in data_gaji:
+            bonuses = json.loads(item['bonus_json'])
+            for b in bonuses:
+                if b['nama'] not in bonus_headers:
+                    bonus_headers.append(b['nama'])
+
+        # 2. Susun Struktur Header
+        header_awal = ['Nama Karyawan', 'NIY', 'Jabatan', 'Status Data', 'Gaji Pokok', 'Tunjangan Jabatan', 'Skor Performance (%)']
+        header_akhir = ['Total Potongan', 'Deskripsi Potongan', 'Total Gaji Bersih (THP)']
+        full_header = header_awal + bonus_headers + header_akhir
+
+        # Tulis baris header ke Excel
+        ws.append(full_header)
+
+        # Mewarnai dan menebalkan Header
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill("solid", fgColor="059669") # Warna Emerald
+        thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+
+        for col_num, cell in enumerate(ws[1], 1):
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = thin_border
+
+        # 3. Masukkan Data per Karyawan
+        for item in data_gaji:
+            emp = item['employee']
+            bonuses_dict = {b['nama']: b['nominal'] for b in json.loads(item['bonus_json'])}
+
+            row_data = [
+                emp.nama,
+                emp.niy,
+                emp.position.nama_jabatan if emp.position else '-',
+                item['status'],
+                int(item['gaji_pokok']),
+                int(item['tunjangan']),
+                float(item['skor_performance'])
+            ]
+            
+            # Cocokkan nilai bonus dinamis dengan kolom header
+            for bh in bonus_headers:
+                row_data.append(int(bonuses_dict.get(bh, 0)))
+
+            row_data.extend([
+                int(item['total_potongan']),
+                item['deskripsi_potongan'] if item['deskripsi_potongan'] else '-',
+                int(item['gaji_bersih'])
+            ])
+            
+            # Tambahkan baris ke dalam worksheet dan beri border ringan
+            ws.append(row_data)
+            for cell in ws[ws.max_row]:
+                cell.border = thin_border
+                # Beri format angka (Ribuan) untuk kolom uang
+                if isinstance(cell.value, int) and cell.column_letter not in ['B', 'G']:
+                    cell.number_format = '#,##0'
+
+        # 4. Auto-Adjust Lebar Kolom (Rapiin Data)
+        for col in ws.columns:
+            max_length = 0
+            column = col[0].column_letter # Dapatkan huruf kolom (A, B, C...)
+            for cell in col:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            # Set lebar kolom berdasarkan teks terpanjang ditambah sedikit spasi
+            adjusted_width = (max_length + 2)
+            ws.column_dimensions[column].width = adjusted_width
+
+        # Simpan workbook ke dalam HTTP Response
+        wb.save(response)
+        return response
+    # =======================================================================
 
     context = {
         'data_gaji': data_gaji,

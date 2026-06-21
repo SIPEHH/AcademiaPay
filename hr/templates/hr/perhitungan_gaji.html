@@ -81,9 +81,9 @@
                 <button type="submit" name="status" value="draft" class="px-4 py-1.5 rounded-md transition {% if status_filter == 'draft' %}bg-white shadow text-emerald-600 font-bold{% else %}text-gray-500 hover:text-gray-800{% endif %}">Belum Dihitung</button>
             </div>
 
-            <button type="button" onclick="window.print()" class="ml-auto flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                Simpan ke Database (PDF)
+            <button type="submit" name="btn_export_excel" value="1" class="ml-auto flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                Export Excel Laporan
             </button>
         </form>
     </div>

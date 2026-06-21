@@ -90,7 +90,8 @@
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-blue-50">
                     <tr>
-                        <th class="px-4 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Nama Tunjangan / Integrasi</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Nama Tunjangan</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Jenis</th>
                         <th class="px-4 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Nominal Maksimal (Cair 100%)</th>
                         <th class="px-4 py-3 text-center text-xs font-bold text-blue-800 uppercase tracking-wider w-32">Aksi</th>
                     </tr>
@@ -99,13 +100,20 @@
                     {% for tunj in tunjangans %}
                     <tr>
                         <td class="px-4 py-3 text-sm font-bold text-gray-800">{{ tunj.nama_tunjangan }}</td>
+                        <td class="px-4 py-3 text-sm">
+                            {% if tunj.jenis_tunjangan == 'Tetap' %}
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Tetap (100%)</span>
+                            {% else %}
+                                <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Variabel (KPI)</span>
+                            {% endif %}
+                        </td>
                         <td class="px-4 py-3 text-sm text-green-600 font-bold">Rp {{ tunj.nominal_maksimal|floatformat:0 }}</td>
                         <td class="px-4 py-3 text-center text-sm">
                             <button onclick="openModal('modalEditTunjangan{{ tunj.id }}')" class="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded transition font-medium">Edit</button>
                         </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="3" class="px-4 py-8 text-center text-sm text-gray-500">Belum ada data Master Tunjangan. Silakan buat baru.</td></tr>
+                    <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500">Belum ada data Master Tunjangan. Silakan buat baru.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -275,6 +283,15 @@
                         <label class="block text-sm font-medium text-gray-700 mb-1">Nama Tunjangan / Integrasi KPI</label>
                         <input type="text" name="nama_tunjangan" placeholder="Contoh: Tunjangan Kedisiplinan" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500" required>
                     </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Tunjangan</label>
+                        <select name="jenis_tunjangan" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 bg-white" required>
+                            <option value="Variabel">Tunjangan Variabel (Dipengaruhi KPI SDM)</option>
+                            <option value="Tetap">Tunjangan Tetap (Otomatis Cair 100%)</option>
+                        </select>
+                    </div>
+
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Nominal Maksimal (Cair 100%)</label>
                         <input type="number" name="nominal_maksimal" placeholder="Contoh: 500000" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500" required>
@@ -300,6 +317,15 @@
                         <label class="block text-sm font-medium text-gray-700 mb-1">Nama Tunjangan / Integrasi KPI</label>
                         <input type="text" name="edit_nama_tunjangan" value="{{ tunj.nama_tunjangan }}" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500" required>
                     </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Tunjangan</label>
+                        <select name="edit_jenis_tunjangan" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 bg-white" required>
+                            <option value="Variabel" {% if tunj.jenis_tunjangan == 'Variabel' %}selected{% endif %}>Tunjangan Variabel (Dipengaruhi KPI SDM)</option>
+                            <option value="Tetap" {% if tunj.jenis_tunjangan == 'Tetap' %}selected{% endif %}>Tunjangan Tetap (Otomatis Cair 100%)</option>
+                        </select>
+                    </div>
+
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Nominal Maksimal (Cair 100%)</label>
                         <input type="number" name="edit_nominal_maksimal" value="{{ tunj.nominal_maksimal|stringformat:'f'|slice:':-3' }}" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500" required>
@@ -317,7 +343,8 @@
     </div>
     {% endfor %}
     
-    {% endif %} <script>
+    {% endif %} 
+    <script>
         function openModal(modalId) {
             const modal = document.getElementById(modalId);
             if(modal) {

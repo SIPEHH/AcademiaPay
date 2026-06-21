@@ -52,11 +52,17 @@ class Employee(models.Model):
 
 # 5. Tabel MASTER TUNJANGAN (Konfigurasi Finansial Integrasi KPI)
 class MasterTunjangan(models.Model):
+    JENIS_CHOICES = (
+        ('Tetap', 'Tunjangan Tetap (Otomatis 100%)'),
+        ('Variabel', 'Tunjangan Variabel (Berbasis KPI)'),
+    )
     nama_tunjangan = models.CharField(max_length=100, unique=True)
     nominal_maksimal = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    # Penanda apakah ini tunjangan fix atau terikat KPI
+    jenis_tunjangan = models.CharField(max_length=20, choices=JENIS_CHOICES, default='Variabel')
 
     def __str__(self):
-        return self.nama_tunjangan
+        return f"{self.nama_tunjangan} ({self.jenis_tunjangan})"
 
 # 6. Tabel PERIODS (Periode Penggajian & KPI)
 class Period(models.Model):
