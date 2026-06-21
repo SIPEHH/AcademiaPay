@@ -7,20 +7,16 @@
 {% block content %}
 <div class="space-y-6">
 
-    <!-- TOP SECTION: Welcome, Visi, Misi -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 grid grid-cols-1 md:grid-cols-3 gap-8">
         
-        <!-- Welcome Section -->
         <div class="col-span-1 border-b md:border-b-0 md:border-r border-gray-200 pb-6 md:pb-0 md:pr-6 flex flex-col justify-center">
             <h2 class="text-2xl font-black text-[#147A53] leading-tight">Selamat Datang,<br>{{ request.user.first_name|default:request.user.username|title }}</h2>
             <p class="text-sm font-bold text-gray-400 mt-1 uppercase tracking-wider">{{ request.user.get_role_display|default:"Admin Keuangan" }}</p>
             <div class="mt-4">
-                <!-- Ikon Tangan Melambai warna Oranye -->
                 <svg class="w-12 h-12 text-[#F58220]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11"></path></svg>
             </div>
         </div>
 
-        <!-- Visi -->
         <div class="col-span-1 flex flex-col">
             <h3 class="text-lg font-black text-[#147A53] mb-2">Visi</h3>
             <p class="text-xs font-semibold text-gray-700 leading-relaxed">
@@ -28,7 +24,6 @@
             </p>
         </div>
 
-        <!-- Misi -->
         <div class="col-span-1 flex flex-col">
             <h3 class="text-lg font-black text-[#147A53] mb-2">Misi</h3>
             <ol class="text-[11px] font-semibold text-gray-700 leading-relaxed space-y-1.5 list-decimal pl-4">
@@ -40,21 +35,15 @@
         </div>
     </div>
 
-    <!-- MIDDLE SECTION: Cards & Table -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        <!-- Kolom Kiri: Ringkasan & Progress -->
         <div class="col-span-1 space-y-6">
             
-            <!-- Card Dark Blue dengan Text Oranye & TOGGLE MATA -->
             <div class="bg-[#0B0F19] p-6 rounded-2xl shadow-lg relative overflow-hidden">
                 
-                <!-- TOMBOL MATA UNTUK TOGGLE HIDE/SHOW -->
                 {% if request.user.role == 'superadmin' or request.user.role == 'biro_keuangan' %}
                 <div class="absolute top-6 right-6 text-[#F58220]/50 hover:text-[#F58220] transition cursor-pointer" onclick="toggleGajiDashboard()" title="Tampilkan/Sembunyikan">
-                    <!-- Icon Mata Tertutup (Tampil default) -->
                     <svg id="iconEyeClosed" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"></path></svg>
-                    <!-- Icon Mata Terbuka (Disembunyikan default) -->
                     <svg id="iconEyeOpen" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                 </div>
                 {% endif %}
@@ -64,10 +53,8 @@
                 <div>
                     <p class="text-xs text-gray-400 font-medium mb-1">Total Gaji Bulan Ini</p>
                     {% if request.user.role == 'superadmin' or request.user.role == 'biro_keuangan' %}
-                        <!-- DEFAULT DIBUAT STRIP, Data Asli Disimpan di 'data-gaji' -->
                         <p class="text-3xl font-black text-[#F58220]" id="textGajiDashboard" data-gaji="Rp {{ estimasi_gaji|floatformat:0|intcomma }}">Rp -----</p>
                     {% else %}
-                        <!-- UNTUK SDM: LANGSUNG STRIP -->
                         <p class="text-3xl font-black text-[#F58220]">Rp -----</p>
                     {% endif %}
                 </div>
@@ -83,9 +70,7 @@
                 </div>
             </div>
 
-            <!-- Progress Pembayaran Gaji -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-6">
-                <!-- Simulasi Circular Chart dengan CSS murni agar lebih rapi dari Chart.js -->
                 <div class="relative w-20 h-20 flex items-center justify-center rounded-full bg-gray-100" style="background: conic-gradient(#F58220 {{ persentase_terbayar }}%, #f3f4f6 0);">
                     <div class="w-14 h-14 bg-white rounded-full flex items-center justify-center">
                         <span class="text-sm font-black text-gray-800">{{ persentase_terbayar }}%</span>
@@ -103,7 +88,6 @@
             </div>
         </div>
 
-        <!-- Kolom Kanan: Tabel Karyawan Belum Digaji -->
         <div class="col-span-1 lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
             <div class="p-6 border-b border-gray-100">
                 <h3 class="text-xl font-black text-gray-800">Karyawan Belum Digaji Bulan Ini</h3>
@@ -124,9 +108,13 @@
                             <td class="py-4 px-6 text-sm font-bold text-gray-800">{{ emp.nama }}</td>
                             <td class="py-4 px-6 text-sm font-medium text-gray-500">{{ emp.niy }}</td>
                             <td class="py-4 px-6 text-center">
-                                <a href="{% url 'perhitungan_gaji' %}?q={{ emp.nama }}" class="inline-block px-3 py-1 bg-white border border-[#147A53] text-[#147A53] text-xs font-bold rounded hover:bg-[#147A53] hover:text-white transition">
-                                    Detail
-                                </a>
+                                {% if request.user.role == 'superadmin' or request.user.role == 'biro_keuangan' %}
+                                    <a href="{% url 'perhitungan_gaji' %}?status=draft" class="inline-block px-3 py-1 bg-white border border-[#147A53] text-[#147A53] text-xs font-bold rounded hover:bg-[#147A53] hover:text-white transition">
+                                        Detail
+                                    </a>
+                                {% else %}
+                                    <span class="text-xs text-gray-400 font-medium italic select-none">Akses Terbatas</span>
+                                {% endif %}
                             </td>
                         </tr>
                         {% empty %}
@@ -145,7 +133,6 @@
 
     </div>
 
-    <!-- Tagline Bawah -->
     <div class="text-center pt-8 pb-4">
         <p class="text-[#147A53] font-black italic tracking-widest uppercase">
             Terbang Lebih Tinggi Melesat Lebih Cepat Melaju Lebih Jauh
@@ -155,19 +142,18 @@
 </div>
 
 <script>
-    // --- SCRIPT UNTUK TOGGLE HIDE/SHOW GAJI ---
     function toggleGajiDashboard() {
         const textEl = document.getElementById('textGajiDashboard');
         const iconEyeClosed = document.getElementById('iconEyeClosed');
         const iconEyeOpen = document.getElementById('iconEyeOpen');
         
+        if (!textEl) return;
+        
         if (textEl.innerText === 'Rp -----') {
-            // Jika sedang hidden, Tampilkan Nilai Asli
             textEl.innerText = textEl.getAttribute('data-gaji');
             iconEyeClosed.classList.add('hidden');
             iconEyeOpen.classList.remove('hidden');
         } else {
-            // Jika sedang tampil, Sembunyikan (Ubah ke strip)
             textEl.innerText = 'Rp -----';
             iconEyeClosed.classList.remove('hidden');
             iconEyeOpen.classList.add('hidden');

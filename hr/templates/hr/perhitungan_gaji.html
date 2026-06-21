@@ -28,7 +28,7 @@
         </div>
 
         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Belum Dihitung</p>
+            <p class="text-xs font-bold text-gray-400 tracking-wider mb-2 uppercase">Belum Dihitung</p>
             <div class="flex justify-between items-end">
                 <p class="text-4xl font-black text-amber-500">{{ belum_dihitung }}</p>
                 <div class="p-2 bg-amber-50 text-amber-500 rounded-full">
@@ -56,12 +56,12 @@
     {% endif %}
 
     <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-200 flex flex-wrap gap-4 items-center justify-between no-print">
-        <form method="GET" class="flex flex-wrap gap-4 items-center w-full">
+        <form method="GET" class="flex flex-wrap gap-4 items-center w-full" onsubmit="return false;">
             <div class="relative flex-1 min-w-[250px]">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 </div>
-                <input type="text" name="q" value="{{ search_query }}" placeholder="Cari nama atau NIY Karyawan..." class="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-emerald-500 text-sm outline-none transition">
+                <input type="text" id="searchKaryawan" name="q" value="{{ search_query }}" placeholder="Cari nama atau NIY Karyawan secara real-time..." class="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-emerald-500 text-sm outline-none transition">
             </div>
 
             <div class="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
@@ -81,7 +81,7 @@
                 <button type="submit" name="status" value="draft" class="px-4 py-1.5 rounded-md transition {% if status_filter == 'draft' %}bg-white shadow text-emerald-600 font-bold{% else %}text-gray-500 hover:text-gray-800{% endif %}">Belum Dihitung</button>
             </div>
 
-            <button type="submit" name="btn_export_excel" value="1" class="ml-auto flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition">
+            <button type="submit" name="btn_export_excel" value="1" onclick="this.form.submit();" class="ml-auto flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                 Export Excel Laporan
             </button>
@@ -89,7 +89,7 @@
     </div>
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <table class="min-w-full divide-y divide-gray-200">
+        <table class="min-w-full divide-y divide-gray-200" id="tabelGajiKaryawan">
             <thead class="bg-gray-50">
                 <tr>
                     <th class="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Karyawan</th>
@@ -104,14 +104,14 @@
             </thead>
             <tbody class="divide-y divide-gray-100 bg-white">
                 {% for item in data_gaji %}
-                <tr class="hover:bg-gray-50 transition">
+                <tr class="karyawan-row hover:bg-gray-50 transition" data-nama="{{ item.employee.nama|lower }}" data-niy="{{ item.employee.niy|lower }}">
                     <td class="px-6 py-4">
                         <div class="flex items-center">
                             <div class="flex-shrink-0 h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold">
                                 {{ item.employee.nama|make_list|first|upper }}
                             </div>
                             <div class="ml-4">
-                                <div class="text-sm font-bold text-gray-900">{{ item.employee.nama }}</div>
+                                <div class="text-sm font-bold text-gray-900 target-nama">{{ item.employee.nama }}</div>
                                 <div class="text-xs text-gray-500">{{ item.employee.position.nama_jabatan }}</div>
                             </div>
                         </div>
@@ -159,8 +159,9 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="8" class="px-6 py-10 text-center text-gray-500">Tidak ada data karyawan ditemukan.</td></tr>
+                <tr id="noDataRow"><td colspan="8" class="px-6 py-10 text-center text-gray-500">Tidak ada data karyawan ditemukan.</td></tr>
                 {% endfor %}
+                <tr id="realtimeNoDataRow" class="hidden"><td colspan="8" class="px-6 py-10 text-center text-gray-500">Karyawan tidak ditemukan dalam filter ini.</td></tr>
             </tbody>
         </table>
     </div>
@@ -300,17 +301,14 @@
     }
 
     function calculateRealtime() {
-        // Hitung Total Bonus
         let totalBonus = 0;
         document.querySelectorAll('.bonus-nominal').forEach(input => {
             totalBonus += parseInt(input.value.replace(/\./g, '')) || 0;
         });
         document.getElementById('displayTotalBonus').innerText = `Rp ${formatRupiah(totalBonus)}`;
 
-        // Hitung Potongan Manual
         let potonganManual = parseInt(document.getElementById('inputPotongan').value.replace(/\./g, '')) || 0;
 
-        // Perhitungan Akhir (Ditambah bonus, dikurangi potongan)
         let subtotal = currentGajiPokok + currentTunjangan;
         let bersih = subtotal + totalBonus - potonganManual;
         document.getElementById('modalTotalBersih').innerText = `Rp ${formatRupiah(bersih)}`;
@@ -330,7 +328,6 @@
         calculateRealtime(); 
     }
 
-    // KOREKSI 2: Kunci Input Berbasis FLAG isKpi
     function addBonusRow(nama = '', nominal = '', isKpi = false) {
         const container = document.getElementById('bonusContainer');
         const rowId = `bonusRow_${Date.now()}`;
@@ -375,7 +372,6 @@
 
         document.getElementById('displayPerformance').value = parseFloat(performance).toFixed(2) + "%";
         
-        // SETUP VALUE POTONGAN
         document.getElementById('inputPotongan').value = potongan > 0 ? formatRupiah(potongan) : '';
         document.getElementById('inputDeskripsiPotongan').value = deskripsiPotongan;
 
@@ -420,6 +416,34 @@
 
             openModalGaji(id, nama, role, niy, status, pokok, tunj, performance, potongan, deskripsiPotongan, bonusList);
         });
+    });
+
+    // ================= PEMBARUAN UTAMA: SCRIPT REAL-TIME SEARCH =================
+    document.getElementById('searchKaryawan').addEventListener('input', function() {
+        const query = this.value.trim().toLowerCase();
+        const rows = document.querySelectorAll('.karyawan-row');
+        const noDataRow = document.getElementById('realtimeNoDataRow');
+        let adaDataCocok = false;
+
+        rows.forEach(row => {
+            const namaKaryawan = row.getAttribute('data-nama');
+            const niyKaryawan = row.getAttribute('data-niy');
+
+            // Cek apakah input text cocok dengan nama atau niy
+            if (namaKaryawan.includes(query) || niyKaryawan.includes(query)) {
+                row.classList.remove('hidden');
+                adaDataCocok = true;
+            } else {
+                row.classList.add('hidden');
+            }
+        });
+
+        // Menampilkan baris "Karyawan tidak ditemukan" jika hasil filter kosong
+        if (!adaDataCocok && query !== '') {
+            noDataRow.classList.remove('hidden');
+        } else {
+            noDataRow.classList.add('hidden');
+        }
     });
 </script>
 {% endblock %}
