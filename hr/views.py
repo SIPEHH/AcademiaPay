@@ -4,7 +4,10 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Sum, Q
 from django.utils import timezone
-from .models import Departement, Position, KpiCriteria, Employee, PenilaianKinerja, DetailPenilaian
+import json
+
+from .models import Departement, Position, KpiCriteria, Employee, PenilaianKinerja, DetailPenilaian, MasterTunjangan
+from .models import Payroll, PayrollDetail
 from .forms import DepartementForm, PositionForm, KpiCriteriaForm
 
 def login_view(request):
@@ -21,11 +24,32 @@ def login_view(request):
 
 @login_required(login_url='login')
 def dashboard_view(request):
-    # Menghitung total karyawan langsung dari database
+    now = timezone.now()
+    current_month = now.month
+    current_year = now.year
+
     total_karyawan = Employee.objects.count()
+    payrolls_bulan_ini = Payroll.objects.filter(bulan=current_month, tahun=current_year, status='Selesai')
     
+    total_sudah_digaji = payrolls_bulan_ini.count()
+    total_belum_digaji = total_karyawan - total_sudah_digaji
+    
+    estimasi_gaji = payrolls_bulan_ini.aggregate(Sum('gaji_bersih'))['gaji_bersih__sum'] or 0
+    
+    persentase_terbayar = 0
+    if total_karyawan > 0:
+        persentase_terbayar = int((total_sudah_digaji / total_karyawan) * 100)
+
+    paid_employee_ids = payrolls_bulan_ini.values_list('employee_id', flat=True)
+    karyawan_belum_digaji = Employee.objects.exclude(id__in=paid_employee_ids)[:5]
+
     context = {
         'total_karyawan': total_karyawan,
+        'estimasi_gaji': estimasi_gaji,
+        'total_sudah_digaji': total_sudah_digaji,
+        'total_belum_digaji': total_belum_digaji,
+        'persentase_terbayar': persentase_terbayar,
+        'karyawan_belum_digaji': karyawan_belum_digaji,
     }
     return render(request, 'hr/dashboard.html', context)
 
@@ -82,9 +106,37 @@ def master_data_view(request):
             messages.success(request, 'Jabatan berhasil dihapus!')
             return redirect('master_data')
 
+        elif 'btn_tambah_tunjangan' in request.POST:
+            nama = request.POST.get('nama_tunjangan')
+            nominal = request.POST.get('nominal_maksimal')
+            if MasterTunjangan.objects.filter(nama_tunjangan__iexact=nama).exists():
+                messages.error(request, 'Nama Tunjangan sudah ada!')
+            else:
+                MasterTunjangan.objects.create(nama_tunjangan=nama, nominal_maksimal=nominal)
+                messages.success(request, 'Tunjangan berhasil ditambahkan!')
+            return redirect('master_data')
+            
+        elif 'btn_edit_tunjangan' in request.POST:
+            tunj = get_object_or_404(MasterTunjangan, id=request.POST.get('tunj_id'))
+            nama = request.POST.get('edit_nama_tunjangan')
+            if MasterTunjangan.objects.filter(nama_tunjangan__iexact=nama).exclude(id=tunj.id).exists():
+                messages.error(request, 'Nama Tunjangan duplikat!')
+            else:
+                tunj.nama_tunjangan = nama
+                tunj.nominal_maksimal = request.POST.get('edit_nominal_maksimal')
+                tunj.save()
+                messages.success(request, 'Tunjangan berhasil diperbarui!')
+            return redirect('master_data')
+            
+        elif 'btn_hapus_tunjangan' in request.POST:
+            get_object_or_404(MasterTunjangan, id=request.POST.get('tunj_id')).delete()
+            messages.success(request, 'Tunjangan berhasil dihapus!')
+            return redirect('master_data')
+
     context = {
         'departements': Departement.objects.all(),
         'positions': Position.objects.all(),
+        'tunjangans': MasterTunjangan.objects.all(),
         'dept_form': DepartementForm(),
         'pos_form': PositionForm(),
     }
@@ -152,6 +204,7 @@ def kelola_kpi_view(request, position_id):
     return render(request, 'hr/kelola_kpi.html', {
         'position': position,
         'kpi_list': KpiCriteria.objects.filter(position=position),
+        'tunjangan_list': MasterTunjangan.objects.all(), 
         'form': KpiCriteriaForm()
     })
 
@@ -232,7 +285,6 @@ def performance_tracker_view(request):
     selected_tahun = int(request.GET.get('tahun', now.year))
     search_query = request.GET.get('q', '')
 
-    # ================= LOGIKA POST (SIMPAN & HAPUS NILAI) =================
     if request.method == 'POST':
         if 'btn_simpan_nilai' in request.POST:
             emp_id = request.POST.get('emp_id')
@@ -243,13 +295,11 @@ def performance_tracker_view(request):
                 employee=emp, bulan=selected_bulan, tahun=selected_tahun
             )
             
-            # --- LOGIKA BARU: MENGHITUNG RATA-RATA INTEGRASI ---
             integrasi_totals = {}
             for kpi in kpis:
                 skor_mentah = float(request.POST.get(f'kpi_{kpi.id}', 0))
                 skor_berbobot = (skor_mentah * float(kpi.bobot)) / 100
                 
-                # Masukkan ke keranjang integrasi masing-masing
                 if kpi.integrasi_kpi not in integrasi_totals:
                     integrasi_totals[kpi.integrasi_kpi] = 0
                 integrasi_totals[kpi.integrasi_kpi] += skor_berbobot
@@ -260,13 +310,12 @@ def performance_tracker_view(request):
                     defaults={'skor_mentah': skor_mentah, 'skor_berbobot': skor_berbobot}
                 )
             
-            # Hitung total akhir: rata-rata dari semua kategori integrasi
             total_skor_akhir = 0
             if integrasi_totals:
                 total_skor_akhir = sum(integrasi_totals.values()) / len(integrasi_totals)
             
             penilaian.total_skor = total_skor_akhir
-            penilaian.save() # Ini otomatis men-trigger penentuan Grade A/B/C/D
+            penilaian.save() 
             messages.success(request, f'Penilaian KPI {emp.nama} berhasil disimpan!')
             
         elif 'btn_hapus_nilai' in request.POST:
@@ -275,12 +324,10 @@ def performance_tracker_view(request):
             
         return redirect(f"{request.path}?bulan={selected_bulan}&tahun={selected_tahun}&q={search_query}")
 
-    # ================= QUERY DATA FRONTEND =================
     employees = Employee.objects.all()
     if search_query:
         employees = employees.filter(Q(nama__icontains=search_query) | Q(niy__icontains=search_query))
 
-    # Strukturkan data untuk Tabel & Modal
     emp_data = []
     for emp in employees:
         penilaian = PenilaianKinerja.objects.filter(employee=emp, bulan=selected_bulan, tahun=selected_tahun).first()
@@ -307,10 +354,8 @@ def performance_tracker_view(request):
             'has_kpi': kpis.exists()
         })
 
-    # ================= ANALITIK 3 CARD =================
     semua_penilaian_bulan_ini = PenilaianKinerja.objects.filter(bulan=selected_bulan, tahun=selected_tahun)
     
-    # 1. Distribusi (Chart)
     distribusi = {
         'A': semua_penilaian_bulan_ini.filter(grade_akhir='A').count(),
         'B': semua_penilaian_bulan_ini.filter(grade_akhir='B').count(),
@@ -318,7 +363,6 @@ def performance_tracker_view(request):
         'D': semua_penilaian_bulan_ini.filter(grade_akhir='D').count(),
     }
     
-    # 2 & 3. Rata-rata Bulan Ini vs Bulan Lalu
     avg_bulan_ini = semua_penilaian_bulan_ini.aggregate(Sum('total_skor'))['total_skor__sum'] or 0
     jml_dinilai = semua_penilaian_bulan_ini.count()
     avg_score = round(float(avg_bulan_ini) / jml_dinilai, 1) if jml_dinilai > 0 else 0
@@ -343,3 +387,171 @@ def performance_tracker_view(request):
         'peningkatan': peningkatan,
     }
     return render(request, 'hr/performance_tracker.html', context)
+
+@login_required(login_url='login')
+def perhitungan_gaji_view(request):
+    now = timezone.now()
+    selected_bulan = int(request.GET.get('bulan', now.month))
+    selected_tahun = int(request.GET.get('tahun', now.year))
+    search_query = request.GET.get('q', '')
+    status_filter = request.GET.get('status', 'semua') 
+
+    master_tunjangans = MasterTunjangan.objects.all()
+
+    if request.method == 'POST':
+        if 'btn_simpan_gaji' in request.POST:
+            emp_id = request.POST.get('emp_id')
+            emp = get_object_or_404(Employee, id=emp_id)
+            
+            gaji_pokok = float(emp.gaji_pokok)
+            
+            penilaian_kpi = PenilaianKinerja.objects.filter(employee=emp, bulan=selected_bulan, tahun=selected_tahun).first()
+            tunjangan_awal = float(emp.position.tunjangan_jabatan) if emp.position else 0.0
+            tunjangan = tunjangan_awal
+            
+            if penilaian_kpi:
+                details_tj = DetailPenilaian.objects.filter(
+                    penilaian=penilaian_kpi,
+                    kriteria_kpi__integrasi_kpi__icontains='jabatan'
+                )
+                if details_tj.exists():
+                    skor_tj = sum(float(d.skor_berbobot) for d in details_tj)
+                    tunjangan = (skor_tj / 100.0) * tunjangan_awal
+            
+            bonus_names = request.POST.getlist('bonus_nama[]')
+            bonus_nominals = request.POST.getlist('bonus_nominal[]')
+            total_bonus = sum([float(nom.replace('.', '') or 0) for nom in bonus_nominals])
+            
+            total_potongan = float(request.POST.get('total_potongan', 0).replace('.', '') if request.POST.get('total_potongan') else 0)
+            deskripsi_potongan = request.POST.get('deskripsi_potongan', '')
+            
+            gaji_bersih = (gaji_pokok + tunjangan) + total_bonus - total_potongan
+            
+            payroll, created = Payroll.objects.update_or_create(
+                employee=emp, bulan=selected_bulan, tahun=selected_tahun,
+                defaults={
+                    'gaji_pokok': gaji_pokok,
+                    'tunjangan_jabatan': tunjangan,
+                    'total_bonus': total_bonus,
+                    'total_potongan': total_potongan,
+                    'deskripsi_potongan': deskripsi_potongan,
+                    'gaji_bersih': gaji_bersih,
+                    'status': 'Selesai' 
+                }
+            )
+            
+            payroll.bonus_details.all().delete()
+            for nama, nom in zip(bonus_names, bonus_nominals):
+                nominal_bersih = float(str(nom).replace('.', '') or 0)
+                if nama and nominal_bersih > 0:
+                    PayrollDetail.objects.create(payroll=payroll, nama_bonus=nama, nominal=nominal_bersih)
+            
+            messages.success(request, f'Gaji {emp.nama} berhasil dihitung dan disimpan!')
+            return redirect(f"{request.path}?bulan={selected_bulan}&tahun={selected_tahun}&q={search_query}&status={status_filter}")
+
+    employees = Employee.objects.all()
+    if search_query:
+        employees = employees.filter(Q(nama__icontains=search_query) | Q(niy__icontains=search_query))
+
+    data_gaji = []
+    total_diproses = 0
+    estimasi_pencairan = 0
+
+    for emp in employees:
+        payroll = Payroll.objects.filter(employee=emp, bulan=selected_bulan, tahun=selected_tahun).first()
+        penilaian_kpi = PenilaianKinerja.objects.filter(employee=emp, bulan=selected_bulan, tahun=selected_tahun).first()
+        
+        status = payroll.status if payroll else 'Draft'
+        gaji_pokok = float(payroll.gaji_pokok if payroll else emp.gaji_pokok)
+        
+        if payroll:
+            tunjangan = float(payroll.tunjangan_jabatan)
+            total_potongan = float(payroll.total_potongan)
+            deskripsi_potongan = payroll.deskripsi_potongan or ''
+        else:
+            tunjangan_awal = float(emp.position.tunjangan_jabatan) if emp.position else 0.0
+            tunjangan = tunjangan_awal
+            total_potongan = 0.0
+            deskripsi_potongan = ''
+            if penilaian_kpi:
+                details_tj = DetailPenilaian.objects.filter(
+                    penilaian=penilaian_kpi,
+                    kriteria_kpi__integrasi_kpi__icontains='jabatan'
+                )
+                if details_tj.exists():
+                    skor_tj = sum(float(d.skor_berbobot) for d in details_tj)
+                    tunjangan = (skor_tj / 100.0) * tunjangan_awal
+        
+        if status == 'Selesai':
+            total_diproses += 1
+            estimasi_pencairan += float(payroll.gaji_bersih)
+            
+        if status_filter == 'selesai' and status != 'Selesai': continue
+        if status_filter == 'draft' and status != 'Draft': continue
+
+        skor_performance = float(penilaian_kpi.total_skor) if penilaian_kpi else 0.0
+
+        bonus_list = []
+        if payroll and payroll.status == 'Selesai':
+            for b in payroll.bonus_details.all():
+                is_kpi = any(x in b.nama_bonus for x in ["(KPI:", "(Belum Dinilai)"])
+                bonus_list.append({'nama': b.nama_bonus, 'nominal': float(b.nominal), 'is_kpi': is_kpi})
+        else:
+            # === PERBAIKAN LOGIKA MASTER TUNJANGAN ===
+            # Hanya berikan tunjangan jika ada KPI yang mengikat tunjangan tersebut pada jabatan si karyawan
+            for mt in master_tunjangans:
+                kpi_terikat = KpiCriteria.objects.filter(position=emp.position, integrasi_kpi__iexact=mt.nama_tunjangan)
+                
+                if kpi_terikat.exists():
+                    if penilaian_kpi:
+                        details = DetailPenilaian.objects.filter(penilaian=penilaian_kpi, kriteria_kpi__in=kpi_terikat)
+                        if details.exists():
+                            skor_capaian = sum(float(d.skor_berbobot) for d in details)
+                            nominal_didapat = (skor_capaian / 100.0) * float(mt.nominal_maksimal)
+                            
+                            bonus_list.append({'nama': f"{mt.nama_tunjangan} (KPI: {skor_capaian}%)", 'nominal': nominal_didapat, 'is_kpi': True})
+                        else:
+                            bonus_list.append({'nama': f"{mt.nama_tunjangan} (Belum Dinilai)", 'nominal': 0.0, 'is_kpi': True})
+                    else:
+                        bonus_list.append({'nama': f"{mt.nama_tunjangan} (Belum Dinilai)", 'nominal': 0.0, 'is_kpi': True})
+                # Jika tidak ada KPI yang terikat, tunjangan diabaikan secara total (tidak mendapat apa-apa)
+
+            if payroll:
+                for b in payroll.bonus_details.all():
+                    if not any(x in b.nama_bonus for x in ["(KPI:", "(Belum Dinilai)"]):
+                        bonus_list.append({'nama': b.nama_bonus, 'nominal': float(b.nominal), 'is_kpi': False})
+
+        total_bonus_display = float(payroll.total_bonus) if payroll else sum(b['nominal'] for b in bonus_list)
+        gaji_bersih_display = float(payroll.gaji_bersih) if payroll else (gaji_pokok + tunjangan + total_bonus_display - total_potongan)
+
+        data_gaji.append({
+            'employee': emp,
+            'payroll': payroll,
+            'status': status,
+            'pendapatan_tetap': gaji_pokok + tunjangan,
+            'gaji_pokok': gaji_pokok,
+            'tunjangan': tunjangan,
+            'skor_performance': skor_performance, 
+            'total_bonus': total_bonus_display,
+            'total_potongan': total_potongan,
+            'deskripsi_potongan': deskripsi_potongan,
+            'gaji_bersih': gaji_bersih_display,
+            'bonus_json': json.dumps(bonus_list) 
+        })
+
+    total_karyawan = employees.count()
+    belum_dihitung = total_karyawan - total_diproses
+
+    context = {
+        'data_gaji': data_gaji,
+        'total_diproses': total_diproses,
+        'total_karyawan': total_karyawan,
+        'belum_dihitung': belum_dihitung,
+        'estimasi_pencairan': estimasi_pencairan,
+        'selected_bulan': selected_bulan,
+        'selected_tahun': selected_tahun,
+        'search_query': search_query,
+        'status_filter': status_filter,
+        'bulan_choices': getattr(Payroll, 'BULAN_CHOICES', PenilaianKinerja.BULAN_CHOICES),
+    }
+    return render(request, 'hr/perhitungan_gaji.html', context)

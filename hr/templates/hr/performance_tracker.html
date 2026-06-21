@@ -280,11 +280,10 @@
     const chartCanvas = document.getElementById('gradeChart');
     if (chartCanvas) {
         const ctx = chartCanvas.getContext('2d');
-        const dataA = {{ distribusi.A|default:0 }};
-        const dataB = {{ distribusi.B|default:0 }};
-        const dataC = {{ distribusi.C|default:0 }};
-        const dataD = {{ distribusi.D|default:0 }};
-
+        const dataA = Number("{{ distribusi.A|default:0 }}");
+        const dataB = Number("{{ distribusi.B|default:0 }}");
+        const dataC = Number("{{ distribusi.C|default:0 }}");
+        const dataD = Number("{{ distribusi.D|default:0 }}");
         new Chart(ctx, {
             type: 'doughnut',
             data: {

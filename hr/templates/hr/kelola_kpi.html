@@ -36,7 +36,7 @@
             <thead class="bg-gray-50">
                 <tr>
                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nama Indikator</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Integrasi</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Integrasi Tunjangan</th>
                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Metode Ukur</th>
                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Bobot (%)</th>
                     <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase w-24">Aksi</th>
@@ -49,7 +49,7 @@
                         <p class="text-sm font-medium text-gray-800">{{ kpi.nama_kriteria }}</p>
                         <p class="text-xs text-gray-500 mt-1">{{ kpi.deskripsi }}</p>
                     </td>
-                    <td class="px-4 py-3 text-sm text-gray-800 capitalize">{{ kpi.integrasi_kpi }}</td>
+                    <td class="px-4 py-3 text-sm text-gray-800 font-semibold">{{ kpi.integrasi_kpi }}</td>
                     <td class="px-4 py-3 text-sm text-gray-800 capitalize">{{ kpi.metode_ukur }}</td>
                     <td class="px-4 py-3 text-sm font-semibold text-blue-600">{{ kpi.bobot }}</td>
                     <td class="px-4 py-3 text-sm text-center">
@@ -64,6 +64,7 @@
     </div>
 </div>
 
+<!-- ================= MODAL TAMBAH KPI ================= -->
 <div id="modalKpi" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
     <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
         <h3 class="text-lg font-bold text-gray-800 mb-4">Tambah Indikator KPI</h3>
@@ -84,8 +85,15 @@
                         {{ form.metode_ukur }}
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Integrasi</label>
-                        {{ form.integrasi_kpi }}
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Integrasi (Tunjangan)</label>
+                        <!-- Pilihan Integrasi Dinamis -->
+                        <select name="integrasi_kpi" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 bg-white" required>
+                            <option value="" disabled selected>Pilih Tunjangan...</option>
+                            <option value="Tunjangan Jabatan">Tunjangan Jabatan (Bawaan)</option>
+                            {% for t in tunjangan_list %}
+                                <option value="{{ t.nama_tunjangan }}">{{ t.nama_tunjangan }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                 </div>
                 <div>
@@ -101,6 +109,7 @@
     </div>
 </div>
 
+<!-- ================= MODAL EDIT KPI ================= -->
 {% for kpi in kpi_list %}
 <div id="modalEditKpi{{ kpi.id }}" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
     <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
@@ -130,12 +139,18 @@
                     </div>
                     
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Integrasi</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Integrasi (Tunjangan)</label>
+                        <!-- Pilihan Integrasi Dinamis untuk Edit -->
                         <select name="edit_integrasi_kpi" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" required>
-                            {% for value, text in form.fields.integrasi_kpi.choices %}
-                                {% if value %}
-                                <option value="{{ value }}" {% if kpi.integrasi_kpi == value %}selected{% endif %}>{{ text }}</option>
-                                {% endif %}
+                            <option value="" disabled>Pilih Tunjangan...</option>
+                            <option value="Tunjangan Jabatan" {% if kpi.integrasi_kpi == 'Tunjangan Jabatan' %}selected{% endif %}>Tunjangan Jabatan (Bawaan)</option>
+                            
+                            <!-- Tambahkan fallback untuk data lama seperti 'jabatan' atau 'performance' jika ada -->
+                            {% if kpi.integrasi_kpi == 'jabatan' %}<option value="jabatan" selected>Jabatan (Legacy)</option>{% endif %}
+                            {% if kpi.integrasi_kpi == 'performance' %}<option value="performance" selected>Performance (Legacy)</option>{% endif %}
+                            
+                            {% for t in tunjangan_list %}
+                                <option value="{{ t.nama_tunjangan }}" {% if kpi.integrasi_kpi == t.nama_tunjangan %}selected{% endif %}>{{ t.nama_tunjangan }}</option>
                             {% endfor %}
                         </select>
                     </div>

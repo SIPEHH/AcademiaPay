@@ -76,7 +76,43 @@
             </div>
         </div>
     </div>
+
+    <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h2 class="text-xl font-bold text-gray-800">Konfigurasi Tunjangan & Integrasi KPI</h2>
+                <p class="text-sm text-gray-500 mt-1">Buat komponen tunjangan baru (contoh: Kedisiplinan, Kinerja) yang nantinya bisa diintegrasikan ke indikator KPI oleh Biro SDM.</p>
+            </div>
+            <button onclick="openModal('modalTambahTunjangan')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-bold rounded shadow transition">+ Tambah Tunjangan</button>
+        </div>
+
+        <div class="overflow-x-auto border border-gray-200 rounded-lg">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-blue-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Nama Tunjangan / Integrasi</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Nominal Maksimal (Cair 100%)</th>
+                        <th class="px-4 py-3 text-center text-xs font-bold text-blue-800 uppercase tracking-wider w-32">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 bg-white">
+                    {% for tunj in tunjangans %}
+                    <tr>
+                        <td class="px-4 py-3 text-sm font-bold text-gray-800">{{ tunj.nama_tunjangan }}</td>
+                        <td class="px-4 py-3 text-sm text-green-600 font-bold">Rp {{ tunj.nominal_maksimal|floatformat:0 }}</td>
+                        <td class="px-4 py-3 text-center text-sm">
+                            <button onclick="openModal('modalEditTunjangan{{ tunj.id }}')" class="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded transition font-medium">Edit</button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="3" class="px-4 py-8 text-center text-sm text-gray-500">Belum ada data Master Tunjangan. Silakan buat baru.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
     {% endif %}
+
 
     {% if request.user.role == 'superadmin' or request.user.role == 'biro_sdm' %}
     <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
@@ -122,6 +158,9 @@
     </div>
     {% endif %}
 
+
+    {% if request.user.role == 'superadmin' or request.user.role == 'biro_keuangan' %}
+    
     <div id="modalDept" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
             <h3 class="text-lg font-bold text-gray-800 mb-4">Tambah Departemen Baru</h3>
@@ -211,7 +250,7 @@
                 
                 <div class="mb-4">
                     <label class="block text-sm font-medium text-gray-700 mb-1">Tunjangan Jabatan (Rp)</label>
-                    <input type="number" name="edit_tunjangan" value="{{ pos.tunjangan_jabatan }}" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                    <input type="number" name="edit_tunjangan" value="{{ pos.tunjangan_jabatan|stringformat:'f'|slice:':-3' }}" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
                 </div>
                 
                 <div class="flex justify-between items-center mt-6">
@@ -226,16 +265,72 @@
     </div>
     {% endfor %}
 
-    <script>
+    <div id="modalTambahTunjangan" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">Tambah Master Tunjangan Baru</h3>
+            <form method="POST">
+                {% csrf_token %}
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nama Tunjangan / Integrasi KPI</label>
+                        <input type="text" name="nama_tunjangan" placeholder="Contoh: Tunjangan Kedisiplinan" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nominal Maksimal (Cair 100%)</label>
+                        <input type="number" name="nominal_maksimal" placeholder="Contoh: 500000" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500" required>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-2 mt-6">
+                    <button type="button" onclick="closeModal('modalTambahTunjangan')" class="px-4 py-2 bg-gray-200 text-gray-800 rounded">Batal</button>
+                    <button type="submit" name="btn_tambah_tunjangan" class="px-4 py-2 bg-blue-600 text-white rounded font-bold">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% for tunj in tunjangans %}
+    <div id="modalEditTunjangan{{ tunj.id }}" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">Edit Master Tunjangan</h3>
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="tunj_id" value="{{ tunj.id }}">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nama Tunjangan / Integrasi KPI</label>
+                        <input type="text" name="edit_nama_tunjangan" value="{{ tunj.nama_tunjangan }}" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nominal Maksimal (Cair 100%)</label>
+                        <input type="number" name="edit_nominal_maksimal" value="{{ tunj.nominal_maksimal|stringformat:'f'|slice:':-3' }}" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500" required>
+                    </div>
+                </div>
+                <div class="flex justify-between items-center mt-6">
+                    <button type="submit" name="btn_hapus_tunjangan" class="px-4 py-2 bg-red-100 text-red-600 rounded font-medium" onclick="return confirm('Yakin hapus tunjangan ini?');">Hapus</button>
+                    <div class="flex space-x-2">
+                        <button type="button" onclick="closeModal('modalEditTunjangan{{ tunj.id }}')" class="px-4 py-2 bg-gray-200 text-gray-800 rounded">Batal</button>
+                        <button type="submit" name="btn_edit_tunjangan" class="px-4 py-2 bg-blue-600 text-white rounded font-bold">Simpan</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+    
+    {% endif %} <script>
         function openModal(modalId) {
             const modal = document.getElementById(modalId);
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
+            if(modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
         }
         function closeModal(modalId) {
             const modal = document.getElementById(modalId);
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
+            if(modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
         }
     </script>
 </div>

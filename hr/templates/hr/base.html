@@ -20,7 +20,7 @@
             </a>
             
             {% if request.user.role == 'superadmin' or request.user.role == 'biro_keuangan' %}
-            <a href="#" class="flex items-center space-x-3 px-4 py-2.5 rounded-md hover:bg-gray-800 transition text-gray-300 hover:text-white opacity-50 cursor-not-allowed" title="Belum dibuat">
+            <a href="{% url 'perhitungan_gaji' %}" class="flex items-center space-x-3 px-4 py-2.5 rounded-md hover:bg-gray-800 transition text-gray-300 hover:text-white">
                 <span>Perhitungan Gaji</span>
             </a>
             {% endif %}
