@@ -6,8 +6,9 @@ from django.db.models import Sum, Q
 from django.utils import timezone
 from django.http import HttpResponse
 import json
-import openpyxl # BARU: Import library Excel asli
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side # BARU: Import styling Excel
+import io # PERBAIKAN: Import library io untuk Virtual Buffer Excel
+import openpyxl 
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
 from .models import Departement, Position, KpiCriteria, Employee, PenilaianKinerja, DetailPenilaian, MasterTunjangan
 from .models import Payroll, PayrollDetail
@@ -399,7 +400,9 @@ def perhitungan_gaji_view(request):
     selected_bulan = int(request.GET.get('bulan', now.month))
     selected_tahun = int(request.GET.get('tahun', now.year))
     search_query = request.GET.get('q', '')
-    status_filter = request.GET.get('status', 'semua') 
+    
+    # PERBAIKAN 1: Tambahkan .lower() agar filter kebal huruf besar/kecil dari Form HTML
+    status_filter = request.GET.get('status', 'semua').lower() 
 
     master_tunjangans = MasterTunjangan.objects.all()
 
@@ -458,7 +461,7 @@ def perhitungan_gaji_view(request):
             messages.success(request, f'Gaji {emp.nama} berhasil dihitung dan disimpan!')
             return redirect(f"{request.path}?bulan={selected_bulan}&tahun={selected_tahun}&q={search_query}&status={status_filter}")
 
-    # ================= QUERY DATA KARYAWAN DENGAN LIVE SYNC SELALU AKTIF =================
+    # ================= QUERY DATA KARYAWAN =================
     employees = Employee.objects.all()
     if search_query:
         employees = employees.filter(Q(nama__icontains=search_query) | Q(niy__icontains=search_query))
@@ -554,11 +557,6 @@ def perhitungan_gaji_view(request):
 
     # ================= LOGIKA EXPORT EXCEL RAPI (OPENPYXL) =================
     if request.GET.get('btn_export_excel'):
-        # Menyiapkan response sebagai file .xlsx
-        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        response['Content-Disposition'] = f'attachment; filename="Laporan_Gaji_{selected_bulan}_{selected_tahun}.xlsx"'
-        
-        # Membuat Workbook Excel baru
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = f"Gaji Bln {selected_bulan} Thn {selected_tahun}"
@@ -576,12 +574,11 @@ def perhitungan_gaji_view(request):
         header_akhir = ['Total Potongan', 'Deskripsi Potongan', 'Total Gaji Bersih (THP)']
         full_header = header_awal + bonus_headers + header_akhir
 
-        # Tulis baris header ke Excel
         ws.append(full_header)
 
         # Mewarnai dan menebalkan Header
         header_font = Font(bold=True, color="FFFFFF")
-        header_fill = PatternFill("solid", fgColor="059669") # Warna Emerald
+        header_fill = PatternFill("solid", fgColor="059669") 
         thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
 
         for col_num, cell in enumerate(ws[1], 1):
@@ -605,7 +602,6 @@ def perhitungan_gaji_view(request):
                 float(item['skor_performance'])
             ]
             
-            # Cocokkan nilai bonus dinamis dengan kolom header
             for bh in bonus_headers:
                 row_data.append(int(bonuses_dict.get(bh, 0)))
 
@@ -615,30 +611,32 @@ def perhitungan_gaji_view(request):
                 int(item['gaji_bersih'])
             ])
             
-            # Tambahkan baris ke dalam worksheet dan beri border ringan
             ws.append(row_data)
             for cell in ws[ws.max_row]:
                 cell.border = thin_border
-                # Beri format angka (Ribuan) untuk kolom uang
                 if isinstance(cell.value, int) and cell.column_letter not in ['B', 'G']:
                     cell.number_format = '#,##0'
 
-        # 4. Auto-Adjust Lebar Kolom (Rapiin Data)
         for col in ws.columns:
             max_length = 0
-            column = col[0].column_letter # Dapatkan huruf kolom (A, B, C...)
+            column = col[0].column_letter 
             for cell in col:
                 try:
                     if len(str(cell.value)) > max_length:
                         max_length = len(str(cell.value))
                 except:
                     pass
-            # Set lebar kolom berdasarkan teks terpanjang ditambah sedikit spasi
             adjusted_width = (max_length + 2)
             ws.column_dimensions[column].width = adjusted_width
 
-        # Simpan workbook ke dalam HTTP Response
-        wb.save(response)
+        # PERBAIKAN 2: Simpan workbook ke Virtual Buffer agar tidak diblokir Linux
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        
+        # Masukkan buffer ke dalam HTTP Response
+        response = HttpResponse(buffer, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="Laporan_Gaji_{selected_bulan}_{selected_tahun}.xlsx"'
         return response
     # =======================================================================
 
